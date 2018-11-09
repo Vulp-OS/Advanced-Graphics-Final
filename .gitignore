@@ -18,7 +18,9 @@
 x64/
 x86/
 bld/
-[Bb]in/
+# [Bb]in/
+bin/logs
+*.exe
 [Oo]bj/
 [Ll]og/
 

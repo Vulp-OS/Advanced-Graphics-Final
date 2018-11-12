@@ -5,5 +5,5 @@ This project is a collaboration to implement Ambient Occlusion in OpenGL for our
 
 [@Ethan Rockwood](https://github.com/drockwood94)  
 [@Andrew Kulpa](https://github.com/Andrew-Kulpa)  
-Cody Meredith  
-Darren Wolbers  
+[@Cody Meridith](https://github.com/Cbmeridith)  
+[@Darren Wolbers](https://github.com/rukkro)  

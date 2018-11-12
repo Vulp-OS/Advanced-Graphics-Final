@@ -186,7 +186,7 @@ class advanced_graphics_final : public sb6::application
 
 		char bufferAo[1024], bufferPhong[1024];
 		glGetShaderInfoLog(vs_ao, 1024, NULL, bufferAo);
-		glGetShaderInfoLog(vs_ao, 1024, NULL, bufferPhong);
+		glGetShaderInfoLog(vs_phong, 1024, NULL, bufferPhong);
 		OutputDebugStringA(bufferAo);
 		OutputDebugStringA(bufferPhong);
 

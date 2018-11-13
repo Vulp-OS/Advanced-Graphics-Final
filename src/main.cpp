@@ -6,10 +6,11 @@
 #include "OBJLoader.h"
 #include <shader.h>
 #include <Windows.h>
-#define STACKS 18
-#define SLICES 36
-#define PI 3.14159
-bool gluInvertMatrix(const float m[16], float invOut[16]);
+
+constexpr auto STACKS = 18;
+constexpr auto SLICES = 36;
+constexpr auto PI = 3.14159;
+
 class advanced_graphics_final : public sb6::application
 {
 	void init()
@@ -174,7 +175,7 @@ class advanced_graphics_final : public sb6::application
 
 		viewMatrix = vmath::translate(0.0f, 0.0f, -3.0f);
 		normalViewMatrix = vmath::translate(0.0f, 0.0f, -3.0f);
-		modelMatrix = vmath::mat4::identity();
+		modelMatrix = vmath::translate(0.0f, 0.0f, 3.0f);
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LEQUAL);
 		GLuint  vs_ao, fs_ao, vs_phong, fs_phong;
@@ -227,8 +228,6 @@ class advanced_graphics_final : public sb6::application
 		uniformsAo.projection = glGetUniformLocation(render_prog_ao, "projection");
 		uniformsAo.lightSource = glGetUniformLocation(render_prog_ao, "lightSource");
 		uniformsAo.normalMatrix = glGetUniformLocation(render_prog_ao, "normalMatrix");
-		uniformsAo.currentFrame = glGetUniformLocation(render_prog_ao, "currentFrame");
-		uniformsAo.totalFrames = glGetUniformLocation(render_prog_ao, "totalFrames");
 
 
 		uniformsPhong.model = glGetUniformLocation(render_prog_phong, "model");
@@ -236,8 +235,6 @@ class advanced_graphics_final : public sb6::application
 		uniformsPhong.projection = glGetUniformLocation(render_prog_phong, "projection");
 		uniformsPhong.lightSource = glGetUniformLocation(render_prog_phong, "lightSource");
 		uniformsPhong.normalMatrix = glGetUniformLocation(render_prog_phong, "normalMatrix");
-		uniformsPhong.currentFrame = glGetUniformLocation(render_prog_phong, "currentFrame");
-		uniformsPhong.totalFrames = glGetUniformLocation(render_prog_phong, "totalFrames");
 
 
 		glGenVertexArrays(1, &vaoSphere);
@@ -328,11 +325,6 @@ class advanced_graphics_final : public sb6::application
 		delete[] sphereIndices;
 		delete[] circle;
 
-		rotX = 0;
-		rotY = 0;
-		oldMouseX = 0;
-		oldMouseY = 0;
-
 		moveLeft = false;
 		moveRight = false;
 		moveUp = false;
@@ -340,15 +332,9 @@ class advanced_graphics_final : public sb6::application
 		objectView = false;
 		lookUp = lookDown = lookLeft = lookRight = false;
 
-		totalFrames = 26;
-		currentFrame = 0;
-		timesToRepeat = 3;
-		repeatCount = 0;
-
 		glGenTextures(2, textureColor);
 		glGenTextures(2, textureNormal);
 		glGenTextures(2, textureSpec);
-		glGenTextures(2, animationArray);
 
 		//////////////////////////////////////
 		//				SPHERE				//
@@ -375,36 +361,6 @@ class advanced_graphics_final : public sb6::application
 		glBindTexture(GL_TEXTURE_2D, textureSpec[0]);
 		NS_TGALOADER::LoadTGATexture("glowBlack.tga", GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
-		// Load Texture Array
-		glActiveTexture(GL_TEXTURE0 + 3);
-		glBindTexture(GL_TEXTURE_2D_ARRAY, animationArray[0]);
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-		bool firstTime = true;
-		for (int i = 0; i < 26; i++)
-		{
-			char cFile[32];
-			sprintf(cFile, "frame_%d.tga", i);
-			//OutputDebugStringW((string)((char)i));
-			GLbyte *pBits;
-			int nWidth, nHeight, nComponents;
-			GLenum eFormat;
-
-			// Read the texture bits
-			pBits = NS_TGALOADER::gltReadTGABits(cFile, &nWidth, &nHeight, &nComponents, &eFormat);
-			if (firstTime)
-			{
-				glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, nWidth, nHeight, 26, 0, eFormat, GL_UNSIGNED_BYTE, NULL);
-				firstTime = false;
-			}
-			glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, nWidth, nHeight, 1, eFormat, GL_UNSIGNED_BYTE, pBits);
-
-			free(pBits);
-		}
 		globalPerspective = vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 20.0f);
 	}
 
@@ -433,19 +389,8 @@ class advanced_graphics_final : public sb6::application
 		if (lookRight)
 			modelMatrix = modelMatrix * vmath::rotate(-1.0f, 0.0f, 1.0f, 0.0f);
 
-		if (objectView)
-		{
-			gluInvertMatrix(modelMatrix, temp);
-			viewMatrix = vmath::translate(0.0f, 0.0f, -0.7f)*vmath::rotate(35.0f, 1.0f, 0.0f, 0.0f)*temp;
-		}
-		else
-		{
-			viewMatrix = normalViewMatrix;
-		}
-
-
-
-
+		gluInvertMatrix(modelMatrix, temp);
+		viewMatrix = temp;
 	}
 
 	virtual void render(double currentTime)
@@ -454,10 +399,10 @@ class advanced_graphics_final : public sb6::application
 		{
 			resize = false;
 			glViewport(0, 0, w, h);
+			globalPerspective = vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 20.0f);
 		}
-		checkInput();
 
-		rotY += 1;
+		checkInput();
 
 		static const GLfloat black[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		static const GLfloat one = 1.0f;
@@ -476,34 +421,30 @@ class advanced_graphics_final : public sb6::application
 		glActiveTexture(GL_TEXTURE0 + 2);
 		glBindTexture(GL_TEXTURE_2D, textureSpec[0]);
 
-		glActiveTexture(GL_TEXTURE0 + 3);
-		glBindTexture(GL_TEXTURE_2D_ARRAY, animationArray[0]);
-
-		glBindVertexArray(vaoSphere);
-		glUniform1i(uniformsAo.currentFrame, currentFrame);
-		glUniform1i(uniformsAo.totalFrames, totalFrames);
-
-		if (repeatCount < timesToRepeat) {
-			repeatCount++;
-		}
-		else {
-			repeatCount = 0;
-			if (currentFrame < totalFrames - 1) {
-				currentFrame++;
-			}
-			else {
-				currentFrame = 0;
-			}
-		}
-
+		// Draw sphere 1
 		for (int i = -10; i < 10; i++) {
 			for (int j = -10; j <= 0; j++) {
-				glUniform4f(uniformsAo.lightSource, 0.0f, 3.0f/**cos(rotY * PI / 180.0f)*/, 10.0f/**sin(rotY * PI / 180.0f)*/, 1.0f);
+				glUniform4f(uniformsAo.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
 
 				glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, globalPerspective);
 				glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
-				glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.5f) * vmath::translate(0.0f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)/* * vmath::rotate(rotY, 0.0f, 1.0f, 0.0f*/));
-				glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)/* * vmath::rotate(rotY, 0.0f, 1.0f, 0.0f*/);
+				glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.4f) * vmath::translate(0.4f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
+				glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
+
+				glBindVertexArray(vaoSphere);
+				glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
+			}
+		}
+
+		// Draw sphere 2
+		for (int i = -10; i < 10; i++) {
+			for (int j = -10; j <= 0; j++) {
+				glUniform4f(uniformsAo.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+
+				glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, globalPerspective);
+				glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
+				glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.3f) * vmath::translate(-2.0f, 0.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
+				glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
 
 				glBindVertexArray(vaoSphere);
 				glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
@@ -517,6 +458,7 @@ class advanced_graphics_final : public sb6::application
 		glDeleteProgram(render_prog_phong);
 		glDeleteProgram(render_prog_ao);
 	}
+
 	virtual void onResize(int w, int h)
 	{
 		info.windowWidth = w;
@@ -524,8 +466,6 @@ class advanced_graphics_final : public sb6::application
 		this->w = w;
 		this->h = h;
 		resize = true;
-
-
 	}
 
 	virtual void onMouseMove(int mouseX, int mouseY)
@@ -538,10 +478,6 @@ class advanced_graphics_final : public sb6::application
 		if (action == 1)
 			switch (key)
 			{
-
-			case 86:
-				objectView = true;
-				break;
 			case 283:
 				lookUp = true;
 				break;
@@ -571,9 +507,6 @@ class advanced_graphics_final : public sb6::application
 		else if (action == 0)
 			switch (key)
 			{
-			case 86:
-				objectView = false;
-				break;
 			case 283:
 				lookUp = false;
 				break;
@@ -603,6 +536,136 @@ class advanced_graphics_final : public sb6::application
 
 	}
 
+	bool gluInvertMatrix(const float m[16], float invOut[16])
+	{
+		float inv[16], det;
+		int i;
+
+		inv[0] = m[5] * m[10] * m[15] -
+			m[5] * m[11] * m[14] -
+			m[9] * m[6] * m[15] +
+			m[9] * m[7] * m[14] +
+			m[13] * m[6] * m[11] -
+			m[13] * m[7] * m[10];
+
+		inv[4] = -m[4] * m[10] * m[15] +
+			m[4] * m[11] * m[14] +
+			m[8] * m[6] * m[15] -
+			m[8] * m[7] * m[14] -
+			m[12] * m[6] * m[11] +
+			m[12] * m[7] * m[10];
+
+		inv[8] = m[4] * m[9] * m[15] -
+			m[4] * m[11] * m[13] -
+			m[8] * m[5] * m[15] +
+			m[8] * m[7] * m[13] +
+			m[12] * m[5] * m[11] -
+			m[12] * m[7] * m[9];
+
+		inv[12] = -m[4] * m[9] * m[14] +
+			m[4] * m[10] * m[13] +
+			m[8] * m[5] * m[14] -
+			m[8] * m[6] * m[13] -
+			m[12] * m[5] * m[10] +
+			m[12] * m[6] * m[9];
+
+		inv[1] = -m[1] * m[10] * m[15] +
+			m[1] * m[11] * m[14] +
+			m[9] * m[2] * m[15] -
+			m[9] * m[3] * m[14] -
+			m[13] * m[2] * m[11] +
+			m[13] * m[3] * m[10];
+
+		inv[5] = m[0] * m[10] * m[15] -
+			m[0] * m[11] * m[14] -
+			m[8] * m[2] * m[15] +
+			m[8] * m[3] * m[14] +
+			m[12] * m[2] * m[11] -
+			m[12] * m[3] * m[10];
+
+		inv[9] = -m[0] * m[9] * m[15] +
+			m[0] * m[11] * m[13] +
+			m[8] * m[1] * m[15] -
+			m[8] * m[3] * m[13] -
+			m[12] * m[1] * m[11] +
+			m[12] * m[3] * m[9];
+
+		inv[13] = m[0] * m[9] * m[14] -
+			m[0] * m[10] * m[13] -
+			m[8] * m[1] * m[14] +
+			m[8] * m[2] * m[13] +
+			m[12] * m[1] * m[10] -
+			m[12] * m[2] * m[9];
+
+		inv[2] = m[1] * m[6] * m[15] -
+			m[1] * m[7] * m[14] -
+			m[5] * m[2] * m[15] +
+			m[5] * m[3] * m[14] +
+			m[13] * m[2] * m[7] -
+			m[13] * m[3] * m[6];
+
+		inv[6] = -m[0] * m[6] * m[15] +
+			m[0] * m[7] * m[14] +
+			m[4] * m[2] * m[15] -
+			m[4] * m[3] * m[14] -
+			m[12] * m[2] * m[7] +
+			m[12] * m[3] * m[6];
+
+		inv[10] = m[0] * m[5] * m[15] -
+			m[0] * m[7] * m[13] -
+			m[4] * m[1] * m[15] +
+			m[4] * m[3] * m[13] +
+			m[12] * m[1] * m[7] -
+			m[12] * m[3] * m[5];
+
+		inv[14] = -m[0] * m[5] * m[14] +
+			m[0] * m[6] * m[13] +
+			m[4] * m[1] * m[14] -
+			m[4] * m[2] * m[13] -
+			m[12] * m[1] * m[6] +
+			m[12] * m[2] * m[5];
+
+		inv[3] = -m[1] * m[6] * m[11] +
+			m[1] * m[7] * m[10] +
+			m[5] * m[2] * m[11] -
+			m[5] * m[3] * m[10] -
+			m[9] * m[2] * m[7] +
+			m[9] * m[3] * m[6];
+
+		inv[7] = m[0] * m[6] * m[11] -
+			m[0] * m[7] * m[10] -
+			m[4] * m[2] * m[11] +
+			m[4] * m[3] * m[10] +
+			m[8] * m[2] * m[7] -
+			m[8] * m[3] * m[6];
+
+		inv[11] = -m[0] * m[5] * m[11] +
+			m[0] * m[7] * m[9] +
+			m[4] * m[1] * m[11] -
+			m[4] * m[3] * m[9] -
+			m[8] * m[1] * m[7] +
+			m[8] * m[3] * m[5];
+
+		inv[15] = m[0] * m[5] * m[10] -
+			m[0] * m[6] * m[9] -
+			m[4] * m[1] * m[10] +
+			m[4] * m[2] * m[9] +
+			m[8] * m[1] * m[6] -
+			m[8] * m[2] * m[5];
+
+		det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
+
+		if (det == 0)
+			return false;
+
+		det = 1.0 / det;
+
+		for (i = 0; i < 16; i++)
+			invOut[i] = inv[i] * det;
+
+		return true;
+	}
+
 private:
 	struct
 	{
@@ -611,8 +674,8 @@ private:
 		GLint       projection;
 		GLint       normalMatrix;
 		GLint		lightSource;
-		GLint		currentFrame;
-		GLint		totalFrames;
+		//GLint		currentFrame;
+		//GLint		totalFrames;
 	} uniformsAo, uniformsPhong;
 
 	GLuint          render_prog_ao;
@@ -638,138 +701,7 @@ private:
 	GLuint textureSpec[2];
 	GLuint animationArray[2];
 
-	float rotX, rotY;
-	int currentFrame, totalFrames, timesToRepeat, repeatCount;
-	int oldMouseX, oldMouseY;
 	bool moveLeft, moveRight, moveUp, moveDown, lookLeft, lookRight, lookUp, lookDown, resize, objectView;
 };
-bool gluInvertMatrix(const float m[16], float invOut[16])
-{
-	float inv[16], det;
-	int i;
 
-	inv[0] = m[5] * m[10] * m[15] -
-		m[5] * m[11] * m[14] -
-		m[9] * m[6] * m[15] +
-		m[9] * m[7] * m[14] +
-		m[13] * m[6] * m[11] -
-		m[13] * m[7] * m[10];
-
-	inv[4] = -m[4] * m[10] * m[15] +
-		m[4] * m[11] * m[14] +
-		m[8] * m[6] * m[15] -
-		m[8] * m[7] * m[14] -
-		m[12] * m[6] * m[11] +
-		m[12] * m[7] * m[10];
-
-	inv[8] = m[4] * m[9] * m[15] -
-		m[4] * m[11] * m[13] -
-		m[8] * m[5] * m[15] +
-		m[8] * m[7] * m[13] +
-		m[12] * m[5] * m[11] -
-		m[12] * m[7] * m[9];
-
-	inv[12] = -m[4] * m[9] * m[14] +
-		m[4] * m[10] * m[13] +
-		m[8] * m[5] * m[14] -
-		m[8] * m[6] * m[13] -
-		m[12] * m[5] * m[10] +
-		m[12] * m[6] * m[9];
-
-	inv[1] = -m[1] * m[10] * m[15] +
-		m[1] * m[11] * m[14] +
-		m[9] * m[2] * m[15] -
-		m[9] * m[3] * m[14] -
-		m[13] * m[2] * m[11] +
-		m[13] * m[3] * m[10];
-
-	inv[5] = m[0] * m[10] * m[15] -
-		m[0] * m[11] * m[14] -
-		m[8] * m[2] * m[15] +
-		m[8] * m[3] * m[14] +
-		m[12] * m[2] * m[11] -
-		m[12] * m[3] * m[10];
-
-	inv[9] = -m[0] * m[9] * m[15] +
-		m[0] * m[11] * m[13] +
-		m[8] * m[1] * m[15] -
-		m[8] * m[3] * m[13] -
-		m[12] * m[1] * m[11] +
-		m[12] * m[3] * m[9];
-
-	inv[13] = m[0] * m[9] * m[14] -
-		m[0] * m[10] * m[13] -
-		m[8] * m[1] * m[14] +
-		m[8] * m[2] * m[13] +
-		m[12] * m[1] * m[10] -
-		m[12] * m[2] * m[9];
-
-	inv[2] = m[1] * m[6] * m[15] -
-		m[1] * m[7] * m[14] -
-		m[5] * m[2] * m[15] +
-		m[5] * m[3] * m[14] +
-		m[13] * m[2] * m[7] -
-		m[13] * m[3] * m[6];
-
-	inv[6] = -m[0] * m[6] * m[15] +
-		m[0] * m[7] * m[14] +
-		m[4] * m[2] * m[15] -
-		m[4] * m[3] * m[14] -
-		m[12] * m[2] * m[7] +
-		m[12] * m[3] * m[6];
-
-	inv[10] = m[0] * m[5] * m[15] -
-		m[0] * m[7] * m[13] -
-		m[4] * m[1] * m[15] +
-		m[4] * m[3] * m[13] +
-		m[12] * m[1] * m[7] -
-		m[12] * m[3] * m[5];
-
-	inv[14] = -m[0] * m[5] * m[14] +
-		m[0] * m[6] * m[13] +
-		m[4] * m[1] * m[14] -
-		m[4] * m[2] * m[13] -
-		m[12] * m[1] * m[6] +
-		m[12] * m[2] * m[5];
-
-	inv[3] = -m[1] * m[6] * m[11] +
-		m[1] * m[7] * m[10] +
-		m[5] * m[2] * m[11] -
-		m[5] * m[3] * m[10] -
-		m[9] * m[2] * m[7] +
-		m[9] * m[3] * m[6];
-
-	inv[7] = m[0] * m[6] * m[11] -
-		m[0] * m[7] * m[10] -
-		m[4] * m[2] * m[11] +
-		m[4] * m[3] * m[10] +
-		m[8] * m[2] * m[7] -
-		m[8] * m[3] * m[6];
-
-	inv[11] = -m[0] * m[5] * m[11] +
-		m[0] * m[7] * m[9] +
-		m[4] * m[1] * m[11] -
-		m[4] * m[3] * m[9] -
-		m[8] * m[1] * m[7] +
-		m[8] * m[3] * m[5];
-
-	inv[15] = m[0] * m[5] * m[10] -
-		m[0] * m[6] * m[9] -
-		m[4] * m[1] * m[10] +
-		m[4] * m[2] * m[9] +
-		m[8] * m[1] * m[6] -
-		m[8] * m[2] * m[5];
-
-	det = m[0] * inv[0] + m[1] * inv[4] + m[2] * inv[8] + m[3] * inv[12];
-
-	if (det == 0)
-		return false;
-
-	det = 1.0 / det;
-
-	for (i = 0; i < 16; i++)
-		invOut[i] = inv[i] * det;
-
-	return true;
-}
 DECLARE_MAIN(advanced_graphics_final)

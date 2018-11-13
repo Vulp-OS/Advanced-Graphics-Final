@@ -174,7 +174,7 @@ class advanced_graphics_final : public sb6::application
 
 		viewMatrix = vmath::translate(0.0f, 0.0f, -3.0f);
 		normalViewMatrix = vmath::translate(0.0f, 0.0f, -3.0f);
-		modelMatrix = vmath::mat4::identity();
+		modelMatrix = vmath::translate(0.0f, 0.0f, 3.0f);
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LEQUAL);
 		GLuint  vs_ao, fs_ao, vs_phong, fs_phong;
@@ -227,8 +227,6 @@ class advanced_graphics_final : public sb6::application
 		uniformsAo.projection = glGetUniformLocation(render_prog_ao, "projection");
 		uniformsAo.lightSource = glGetUniformLocation(render_prog_ao, "lightSource");
 		uniformsAo.normalMatrix = glGetUniformLocation(render_prog_ao, "normalMatrix");
-		uniformsAo.currentFrame = glGetUniformLocation(render_prog_ao, "currentFrame");
-		uniformsAo.totalFrames = glGetUniformLocation(render_prog_ao, "totalFrames");
 
 
 		uniformsPhong.model = glGetUniformLocation(render_prog_phong, "model");
@@ -236,8 +234,6 @@ class advanced_graphics_final : public sb6::application
 		uniformsPhong.projection = glGetUniformLocation(render_prog_phong, "projection");
 		uniformsPhong.lightSource = glGetUniformLocation(render_prog_phong, "lightSource");
 		uniformsPhong.normalMatrix = glGetUniformLocation(render_prog_phong, "normalMatrix");
-		uniformsPhong.currentFrame = glGetUniformLocation(render_prog_phong, "currentFrame");
-		uniformsPhong.totalFrames = glGetUniformLocation(render_prog_phong, "totalFrames");
 
 
 		glGenVertexArrays(1, &vaoSphere);
@@ -340,15 +336,10 @@ class advanced_graphics_final : public sb6::application
 		objectView = false;
 		lookUp = lookDown = lookLeft = lookRight = false;
 
-		totalFrames = 26;
-		currentFrame = 0;
-		timesToRepeat = 3;
-		repeatCount = 0;
-
 		glGenTextures(2, textureColor);
 		glGenTextures(2, textureNormal);
 		glGenTextures(2, textureSpec);
-		glGenTextures(2, animationArray);
+		//glGenTextures(2, animationArray);
 
 		//////////////////////////////////////
 		//				SPHERE				//
@@ -375,36 +366,6 @@ class advanced_graphics_final : public sb6::application
 		glBindTexture(GL_TEXTURE_2D, textureSpec[0]);
 		NS_TGALOADER::LoadTGATexture("glowBlack.tga", GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
-		// Load Texture Array
-		glActiveTexture(GL_TEXTURE0 + 3);
-		glBindTexture(GL_TEXTURE_2D_ARRAY, animationArray[0]);
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-		bool firstTime = true;
-		for (int i = 0; i < 26; i++)
-		{
-			char cFile[32];
-			sprintf(cFile, "frame_%d.tga", i);
-			//OutputDebugStringW((string)((char)i));
-			GLbyte *pBits;
-			int nWidth, nHeight, nComponents;
-			GLenum eFormat;
-
-			// Read the texture bits
-			pBits = NS_TGALOADER::gltReadTGABits(cFile, &nWidth, &nHeight, &nComponents, &eFormat);
-			if (firstTime)
-			{
-				glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA, nWidth, nHeight, 26, 0, eFormat, GL_UNSIGNED_BYTE, NULL);
-				firstTime = false;
-			}
-			glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, nWidth, nHeight, 1, eFormat, GL_UNSIGNED_BYTE, pBits);
-
-			free(pBits);
-		}
 		globalPerspective = vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 20.0f);
 	}
 
@@ -433,19 +394,15 @@ class advanced_graphics_final : public sb6::application
 		if (lookRight)
 			modelMatrix = modelMatrix * vmath::rotate(-1.0f, 0.0f, 1.0f, 0.0f);
 
-		if (objectView)
-		{
+		/*if (objectView)
+		{*/
 			gluInvertMatrix(modelMatrix, temp);
-			viewMatrix = vmath::translate(0.0f, 0.0f, -0.7f)*vmath::rotate(35.0f, 1.0f, 0.0f, 0.0f)*temp;
-		}
+			viewMatrix = temp;
+		/*}
 		else
 		{
 			viewMatrix = normalViewMatrix;
-		}
-
-
-
-
+		}*/
 	}
 
 	virtual void render(double currentTime)
@@ -476,23 +433,19 @@ class advanced_graphics_final : public sb6::application
 		glActiveTexture(GL_TEXTURE0 + 2);
 		glBindTexture(GL_TEXTURE_2D, textureSpec[0]);
 
-		glActiveTexture(GL_TEXTURE0 + 3);
-		glBindTexture(GL_TEXTURE_2D_ARRAY, animationArray[0]);
-
 		glBindVertexArray(vaoSphere);
-		glUniform1i(uniformsAo.currentFrame, currentFrame);
-		glUniform1i(uniformsAo.totalFrames, totalFrames);
 
-		if (repeatCount < timesToRepeat) {
-			repeatCount++;
-		}
-		else {
-			repeatCount = 0;
-			if (currentFrame < totalFrames - 1) {
-				currentFrame++;
-			}
-			else {
-				currentFrame = 0;
+		for (int i = -10; i < 10; i++) {
+			for (int j = -10; j <= 0; j++) {
+				glUniform4f(uniformsAo.lightSource, 0.0f, 3.0f/**cos(rotY * PI / 180.0f)*/, 10.0f/**sin(rotY * PI / 180.0f)*/, 1.0f);
+
+				glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, globalPerspective);
+				glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
+				glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.4f) * vmath::translate(0.4f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)/* * vmath::rotate(rotY, 0.0f, 1.0f, 0.0f*/));
+				glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)/* * vmath::rotate(rotY, 0.0f, 1.0f, 0.0f*/);
+
+				glBindVertexArray(vaoSphere);
+				glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
 			}
 		}
 
@@ -502,7 +455,7 @@ class advanced_graphics_final : public sb6::application
 
 				glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, globalPerspective);
 				glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
-				glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.5f) * vmath::translate(0.0f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)/* * vmath::rotate(rotY, 0.0f, 1.0f, 0.0f*/));
+				glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.3f) * vmath::translate(-2.0f, 0.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)/* * vmath::rotate(rotY, 0.0f, 1.0f, 0.0f*/));
 				glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)/* * vmath::rotate(rotY, 0.0f, 1.0f, 0.0f*/);
 
 				glBindVertexArray(vaoSphere);
@@ -524,8 +477,6 @@ class advanced_graphics_final : public sb6::application
 		this->w = w;
 		this->h = h;
 		resize = true;
-
-
 	}
 
 	virtual void onMouseMove(int mouseX, int mouseY)
@@ -538,10 +489,6 @@ class advanced_graphics_final : public sb6::application
 		if (action == 1)
 			switch (key)
 			{
-
-			case 86:
-				objectView = true;
-				break;
 			case 283:
 				lookUp = true;
 				break;
@@ -571,9 +518,6 @@ class advanced_graphics_final : public sb6::application
 		else if (action == 0)
 			switch (key)
 			{
-			case 86:
-				objectView = false;
-				break;
 			case 283:
 				lookUp = false;
 				break;
@@ -611,8 +555,8 @@ private:
 		GLint       projection;
 		GLint       normalMatrix;
 		GLint		lightSource;
-		GLint		currentFrame;
-		GLint		totalFrames;
+		//GLint		currentFrame;
+		//GLint		totalFrames;
 	} uniformsAo, uniformsPhong;
 
 	GLuint          render_prog_ao;
@@ -639,7 +583,7 @@ private:
 	GLuint animationArray[2];
 
 	float rotX, rotY;
-	int currentFrame, totalFrames, timesToRepeat, repeatCount;
+	//int currentFrame, totalFrames, timesToRepeat, repeatCount;
 	int oldMouseX, oldMouseY;
 	bool moveLeft, moveRight, moveUp, moveDown, lookLeft, lookRight, lookUp, lookDown, resize, objectView;
 };

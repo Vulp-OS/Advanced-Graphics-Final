@@ -330,6 +330,7 @@ class advanced_graphics_final : public sb6::application
 		moveUp = false;
 		moveDown = false;
 		objectView = false;
+		useAOprog = false;
 		lookUp = lookDown = lookLeft = lookRight = false;
 
 		glGenTextures(2, textureColor);
@@ -410,7 +411,10 @@ class advanced_graphics_final : public sb6::application
 		glClearBufferfv(GL_COLOR, 0, black);
 		glClearBufferfv(GL_DEPTH, 0, &one);
 
-		glUseProgram(render_prog_phong);
+		if(useAOprog)
+			glUseProgram(render_prog_ao);
+		else
+			glUseProgram(render_prog_phong);
 
 		glActiveTexture(GL_TEXTURE0 + 0);
 		glBindTexture(GL_TEXTURE_2D, textureColor[0]);
@@ -502,7 +506,9 @@ class advanced_graphics_final : public sb6::application
 			case 68:
 				moveRight = true;
 				break;
-
+			case 81:
+				useAOprog = !useAOprog;
+				break;
 			}
 		else if (action == 0)
 			switch (key)
@@ -688,6 +694,7 @@ private:
 	GLuint          vaoHorse;
 	long			horseTriangles;
 
+
 	vmath::mat4		modelMatrix;
 	vmath::mat4		viewMatrix;
 	vmath::mat4		normalViewMatrix;
@@ -701,7 +708,7 @@ private:
 	GLuint textureSpec[2];
 	GLuint animationArray[2];
 
-	bool moveLeft, moveRight, moveUp, moveDown, lookLeft, lookRight, lookUp, lookDown, resize, objectView;
+	bool moveLeft, moveRight, moveUp, moveDown, lookLeft, lookRight, lookUp, lookDown, resize, objectView, useAOprog;
 };
 
 DECLARE_MAIN(advanced_graphics_final)

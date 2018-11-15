@@ -45,6 +45,7 @@ void main(void)
 	fragOut = vec4(diff);
 	fragOut *= vec4(texture(tex_color,vVaryingTextureCoord).rgb,1);
 	fragOut += vec4(texture(tex_glow,vVaryingTextureCoord).rgb*.2,1);
+	fragOut += vec4(1,0,0,0); // toggle code checker
 
 	if(diff > 0)
 	{

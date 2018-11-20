@@ -7,8 +7,8 @@ in vec2 vVaryingTextureCoord;
 in vec4 vVaryingLightDir;
 in vec4 vVaryingNormal;
 in vec4 vVaryingPosViewSpace;
-out vec4 fragOut;
-out vec4 normal_depth;
+layout (location = 0) out vec4 fragOut;
+layout (location = 1) out vec4 normal_depth;
 
 //http://pouet.net/topic.php?which=6266
 //calculates tangent space matrix from normal, vector in plane and texture coordinates

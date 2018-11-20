@@ -9,11 +9,11 @@
 using namespace NS_OBJLOADER;
 #include <shader.h>
 #include <Windows.h>
+#include <ctime>
 
 constexpr auto STACKS = 18;
 constexpr auto SLICES = 36;
 constexpr auto PI = 3.14159;
-
 class advanced_graphics_final : public sb6::application
 {
 	void init()
@@ -172,12 +172,14 @@ class advanced_graphics_final : public sb6::application
 		glBindVertexArray(0);
 
 	}
+	
+	static inline float rand_float() // https://stackoverflow.com/questions/686353/c-random-float-number-generation
+	{
+		return static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
+	}
 
 	virtual void startup()
 	{
-		
-
-
 		viewMatrix = vmath::translate(0.0f, 0.0f, -3.0f);
 		normalViewMatrix = vmath::translate(0.0f, 0.0f, -3.0f);
 		modelMatrix = vmath::translate(0.0f, 0.0f, 3.0f);
@@ -344,7 +346,7 @@ class advanced_graphics_final : public sb6::application
 		glGenTextures(2, textureSpec);
 
 		//////////////////////////////////////
-		//				PLANE				//
+		//				Tree				//  // TODO: Better / more accurate names (cody volunteered as tribute)
 		//////////////////////////////////////
 		MESH planeMesh;
 		map<string, MATERIAL> planeMaterials;
@@ -411,16 +413,41 @@ class advanced_graphics_final : public sb6::application
 		static const GLenum draw_buffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
 		glDrawBuffers(2, draw_buffers);
 
-
-
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 
-		glGenFramebuffers(1, &frameBufferAo);
-		glBindFramebuffer(GL_FRAMEBUFFER, frameBufferAo);
+		glGenVertexArrays(1, &frameBufferAo);
+		glBindVertexArray(frameBufferAo);
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		//////////////////////////////////////////////////////////////////////////////// https://github.com/openglsuperbible/sb6code/blob/master/src/ssao/ssao.cpp
+		glEnable(GL_CULL_FACE);
+		int i;
+		kernel_points point_data;
 
+		for (i = 0; i < 256; i++)
+		{
+			do
+			{
+				point_data.point[i][0] = rand_float() * 2.0f - 1.0f;
+				point_data.point[i][1] = rand_float() * 2.0f - 1.0f;
+				point_data.point[i][2] = rand_float(); // y u do dis?? <-- Cody knows
+				point_data.point[i][3] = 0.0f;
+			} while (length(point_data.point[i]) > 1.0f);
+			normalize(point_data.point[i]);
+		}
+		for (i = 0; i < 256; i++)
+		{
+			point_data.random_vectors[i][0] = rand_float();
+			point_data.random_vectors[i][1] = rand_float();
+			point_data.random_vectors[i][2] = rand_float();
+			point_data.random_vectors[i][3] = rand_float();
+		}
+
+		glGenBuffers(1, &points_buffer);
+		glBindBuffer(GL_UNIFORM_BUFFER, points_buffer);
+		glBufferData(GL_UNIFORM_BUFFER, sizeof(kernel_points), &point_data, GL_STATIC_DRAW);
+		////////////////////////////////////////////////////////////////////////////////
 	}
 
 	void checkInput()
@@ -466,117 +493,81 @@ class advanced_graphics_final : public sb6::application
 
 		static const GLfloat black[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		static const GLfloat one = 1.0f;
-
-		glClearBufferfv(GL_COLOR, 0, black);
-		glClearBufferfv(GL_DEPTH, 0, &one);
-
-		if(useAOprog)
-			glUseProgram(render_prog_ao);
-		else
-			glUseProgram(render_prog_phong);
-
-		glActiveTexture(GL_TEXTURE0 + 0);
-		glBindTexture(GL_TEXTURE_2D, textureColor[0]);
-
-		glActiveTexture(GL_TEXTURE0 + 1);
-		glBindTexture(GL_TEXTURE_2D, textureNormal[0]);
-
-		glActiveTexture(GL_TEXTURE0 + 2);
-		glBindTexture(GL_TEXTURE_2D, textureSpec[0]);
+		
 
 		
 
+		if(useAOprog)
+			glBindFramebuffer(GL_FRAMEBUFFER, frameBufferG);
+		if(!useAOprog)
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		//glBindFramebuffer(GL_FRAMEBUFFER, frameBufferG);
+		glEnable(GL_DEPTH_TEST);
+		glClearBufferfv(GL_COLOR, 0, black);
+		glClearBufferfv(GL_COLOR, 1, black);
+		glClearBufferfv(GL_DEPTH, 0, &one);
+
+		glBindBufferBase(GL_UNIFORM_BUFFER, 0, points_buffer);
+
 			glUseProgram(render_prog_phong);
+			glActiveTexture(GL_TEXTURE0 + 0);
+			glBindTexture(GL_TEXTURE_2D, textureColor[0]);
+
+			glActiveTexture(GL_TEXTURE0 + 1);
+			glBindTexture(GL_TEXTURE_2D, textureNormal[0]);
+
+			glActiveTexture(GL_TEXTURE0 + 2);
+			glBindTexture(GL_TEXTURE_2D, textureSpec[0]);
 			// Draw sphere 1
 			for (int i = -10; i < 10; i++) {
 				for (int j = -10; j <= 0; j++) {
-					if (useAOprog) {
-						glUniform4f(uniformsAo.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+					glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
 
-						glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, globalPerspective);
-						glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
-						glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.4f) * vmath::translate(0.4f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
-						glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
+					glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, globalPerspective);
+					glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
+					glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, (vmath::scale(0.4f) * vmath::translate(0.4f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
+					glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
 
-						glBindVertexArray(vaoSphere);
-						glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
-					}
-					else {
-						glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
-
-						glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, globalPerspective);
-						glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
-						glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, (vmath::scale(0.4f) * vmath::translate(0.4f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
-						glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
-
-						glBindVertexArray(vaoSphere);
-						glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
-					}
+					glBindVertexArray(vaoSphere);
+					glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
 				}
 			}
 
 			// Draw sphere 2
 			for (int i = -10; i < 10; i++) {
 				for (int j = -10; j <= 0; j++) {
-					if (useAOprog) {
-						glUniform4f(uniformsAo.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+					glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
 
-						glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, globalPerspective);
-						glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
-						glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.3f) * vmath::translate(-2.0f, 0.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
-						glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
+					glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, globalPerspective);
+					glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
+					glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, (vmath::scale(0.3f) * vmath::translate(-2.0f, 0.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
+					glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
 
-						glBindVertexArray(vaoSphere);
-						glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
-					}
-					else {
-						glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
-
-						glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, globalPerspective);
-						glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
-						glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, (vmath::scale(0.3f) * vmath::translate(-2.0f, 0.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
-						glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
-
-						glBindVertexArray(vaoSphere);
-						glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
-					}
+					glBindVertexArray(vaoSphere);
+					glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
 				}
 			}
-			glBindVertexArray(planeVAO);
-
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-
-			glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
-			glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 200.0f));
-			glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
-			glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, vmath::translate(0.0f, -2.0f, 0.0f) * vmath::scale(0.3f) * vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
-			glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
-			glDrawArrays(GL_TRIANGLES, 0, Plane_Triangles * 3);
-
-
+		glBindVertexArray(planeVAO);
+		glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+		glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 200.0f));
+		glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
+		glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, vmath::translate(0.0f, -2.0f, 0.0f) * vmath::scale(0.3f) * vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
+		glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
+		glDrawArrays(GL_TRIANGLES, 0, Plane_Triangles * 3);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-
-	/*	if (useAOprog) {
-			glUniform4f(uniformsAo.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
-			glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 200.0f));
-			glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
-			glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, vmath::translate(0.0f, -2.0f, 0.0f) * vmath::scale(0.3f) * vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
-			glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
-			glDrawArrays(GL_TRIANGLES, 0, Plane_Triangles * 3);
-		}
-		else {
-			
-		}*/
-
-
 		
+		if (useAOprog) {
+			glUseProgram(render_prog_ao);
 
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, gPosition);
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, gNormal);
 
+			glDisable(GL_DEPTH_TEST);
+			glBindVertexArray(frameBufferAo);
+			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+		}		
 	}
 
 	virtual void shutdown()
@@ -803,7 +794,14 @@ private:
 		GLint       normalMatrix;
 		GLint		lightSource;
 	} uniformsAo, uniformsPhong;
-
+	/////////////////////////////////// https://github.com/openglsuperbible/sb6code/blob/master/src/ssao/ssao.cpp
+	struct kernel_points
+	{
+		vmath::vec4 point[256];
+		vmath::vec4	random_vectors[256];
+	};
+	GLuint      points_buffer;
+	///////////////////////////////////
 	GLuint          render_prog_ao, render_prog_phong;
 
 	GLuint          vaoSphere;

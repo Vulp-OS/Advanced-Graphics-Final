@@ -2,8 +2,11 @@
 #include <sb6ktx.h>
 #include <vmath.h>
 #include <object.h>
+#include <assert.h> 
+#include <iostream>
 #include "TGALoader.h"
 #include "OBJLoader.h"
+using namespace NS_OBJLOADER;
 #include <shader.h>
 #include <Windows.h>
 
@@ -172,6 +175,8 @@ class advanced_graphics_final : public sb6::application
 
 	virtual void startup()
 	{
+		
+
 
 		viewMatrix = vmath::translate(0.0f, 0.0f, -3.0f);
 		normalViewMatrix = vmath::translate(0.0f, 0.0f, -3.0f);
@@ -190,6 +195,8 @@ class advanced_graphics_final : public sb6::application
 		glGetShaderInfoLog(vs_phong, 1024, NULL, bufferPhong);
 		OutputDebugStringA(bufferAo);
 		OutputDebugStringA(bufferPhong);
+
+
 
 		render_prog_ao = glCreateProgram();
 		glAttachShader(render_prog_ao, vs_ao);
@@ -268,7 +275,6 @@ class advanced_graphics_final : public sb6::application
 				circle[numVertices].b = circle[numVertices].y;
 				circle[numVertices].a = 1;
 				numVertices++;
-
 			}
 		}
 
@@ -330,11 +336,23 @@ class advanced_graphics_final : public sb6::application
 		moveUp = false;
 		moveDown = false;
 		objectView = false;
+		useAOprog = false;
 		lookUp = lookDown = lookLeft = lookRight = false;
 
 		glGenTextures(2, textureColor);
 		glGenTextures(2, textureNormal);
 		glGenTextures(2, textureSpec);
+
+		//////////////////////////////////////
+		//				PLANE				//
+		//////////////////////////////////////
+		MESH planeMesh;
+		map<string, MATERIAL> planeMaterials;
+		const char *planeFile = "Lowpoly_tree_sample.obj"; // "Pacmannblend.obj"
+		LoadOBJFile(planeFile, planeMesh, planeMaterials);
+		createVBOfromMesh(&planeMesh, &planeVAO, &Plane_Triangles);
+
+
 
 		//////////////////////////////////////
 		//				SPHERE				//
@@ -354,14 +372,55 @@ class advanced_graphics_final : public sb6::application
 		glBindTexture(GL_TEXTURE_2D, textureNormal[0]);
 		NS_TGALOADER::LoadTGATexture("normal.tga", GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
-		// Load Glow Map
-		glActiveTexture(GL_TEXTURE0 + 2);
-
-		// Load texture from file
-		glBindTexture(GL_TEXTURE_2D, textureSpec[0]);
-		NS_TGALOADER::LoadTGATexture("glowBlack.tga", GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+		
 
 		globalPerspective = vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 20.0f);
+
+
+
+
+		//setup frame buffers
+		glGenFramebuffers(1, &frameBufferG);
+		glBindFramebuffer(GL_FRAMEBUFFER, frameBufferG);
+
+		glGenTextures(1, &gPosition);
+		glGenTextures(1, &gNormal);
+		glGenTextures(1, &gAlbedo);
+
+		glBindTexture(GL_TEXTURE_2D, gPosition);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB16F, 2048, 2048);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+		glBindTexture(GL_TEXTURE_2D, gNormal);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA32F, 2048, 2048);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+		glBindTexture(GL_TEXTURE_2D, gAlbedo);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_DEPTH_COMPONENT32F, 2048, 2048);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, gPosition, 0);
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, gNormal, 0);
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, gAlbedo, 0);
+
+		static const GLenum draw_buffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+		glDrawBuffers(2, draw_buffers);
+
+
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+
+		glGenFramebuffers(1, &frameBufferAo);
+		glBindFramebuffer(GL_FRAMEBUFFER, frameBufferAo);
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 	}
 
 	void checkInput()
@@ -395,6 +454,7 @@ class advanced_graphics_final : public sb6::application
 
 	virtual void render(double currentTime)
 	{
+		static const GLenum draw_buffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
 		if (resize)
 		{
 			resize = false;
@@ -410,7 +470,10 @@ class advanced_graphics_final : public sb6::application
 		glClearBufferfv(GL_COLOR, 0, black);
 		glClearBufferfv(GL_DEPTH, 0, &one);
 
-		glUseProgram(render_prog_phong);
+		if(useAOprog)
+			glUseProgram(render_prog_ao);
+		else
+			glUseProgram(render_prog_phong);
 
 		glActiveTexture(GL_TEXTURE0 + 0);
 		glBindTexture(GL_TEXTURE_2D, textureColor[0]);
@@ -421,35 +484,99 @@ class advanced_graphics_final : public sb6::application
 		glActiveTexture(GL_TEXTURE0 + 2);
 		glBindTexture(GL_TEXTURE_2D, textureSpec[0]);
 
-		// Draw sphere 1
-		for (int i = -10; i < 10; i++) {
-			for (int j = -10; j <= 0; j++) {
-				glUniform4f(uniformsAo.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+		
 
-				glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, globalPerspective);
-				glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
-				glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.4f) * vmath::translate(0.4f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
-				glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
 
-				glBindVertexArray(vaoSphere);
-				glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		//glBindFramebuffer(GL_FRAMEBUFFER, frameBufferG);
+			glUseProgram(render_prog_phong);
+			// Draw sphere 1
+			for (int i = -10; i < 10; i++) {
+				for (int j = -10; j <= 0; j++) {
+					if (useAOprog) {
+						glUniform4f(uniformsAo.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+
+						glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, globalPerspective);
+						glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
+						glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.4f) * vmath::translate(0.4f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
+						glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
+
+						glBindVertexArray(vaoSphere);
+						glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
+					}
+					else {
+						glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+
+						glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, globalPerspective);
+						glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
+						glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, (vmath::scale(0.4f) * vmath::translate(0.4f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
+						glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
+
+						glBindVertexArray(vaoSphere);
+						glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
+					}
+				}
 			}
-		}
 
-		// Draw sphere 2
-		for (int i = -10; i < 10; i++) {
-			for (int j = -10; j <= 0; j++) {
-				glUniform4f(uniformsAo.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+			// Draw sphere 2
+			for (int i = -10; i < 10; i++) {
+				for (int j = -10; j <= 0; j++) {
+					if (useAOprog) {
+						glUniform4f(uniformsAo.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
 
-				glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, globalPerspective);
-				glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
-				glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.3f) * vmath::translate(-2.0f, 0.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
-				glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
+						glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, globalPerspective);
+						glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
+						glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, (vmath::scale(0.3f) * vmath::translate(-2.0f, 0.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
+						glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
 
-				glBindVertexArray(vaoSphere);
-				glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
+						glBindVertexArray(vaoSphere);
+						glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
+					}
+					else {
+						glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+
+						glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, globalPerspective);
+						glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
+						glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, (vmath::scale(0.3f) * vmath::translate(-2.0f, 0.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
+						glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
+
+						glBindVertexArray(vaoSphere);
+						glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
+					}
+				}
 			}
+			glBindVertexArray(planeVAO);
+
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+
+			glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+			glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 200.0f));
+			glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
+			glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, vmath::translate(0.0f, -2.0f, 0.0f) * vmath::scale(0.3f) * vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
+			glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
+			glDrawArrays(GL_TRIANGLES, 0, Plane_Triangles * 3);
+
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+
+	/*	if (useAOprog) {
+			glUniform4f(uniformsAo.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+			glUniformMatrix4fv(uniformsAo.projection, 1, GL_FALSE, vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 200.0f));
+			glUniformMatrix4fv(uniformsAo.view, 1, GL_FALSE, viewMatrix);
+			glUniformMatrix4fv(uniformsAo.model, 1, GL_FALSE, vmath::translate(0.0f, -2.0f, 0.0f) * vmath::scale(0.3f) * vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
+			glUniformMatrix4fv(uniformsAo.normalMatrix, 1, GL_FALSE, vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
+			glDrawArrays(GL_TRIANGLES, 0, Plane_Triangles * 3);
 		}
+		else {
+			
+		}*/
+
+
+		
+
+
 	}
 
 	virtual void shutdown()
@@ -502,7 +629,9 @@ class advanced_graphics_final : public sb6::application
 			case 68:
 				moveRight = true;
 				break;
-
+			case 81:
+				useAOprog = !useAOprog;
+				break;
 			}
 		else if (action == 0)
 			switch (key)
@@ -531,7 +660,6 @@ class advanced_graphics_final : public sb6::application
 			case 68:
 				moveRight = false;
 				break;
-
 			}
 
 	}
@@ -674,19 +802,15 @@ private:
 		GLint       projection;
 		GLint       normalMatrix;
 		GLint		lightSource;
-		//GLint		currentFrame;
-		//GLint		totalFrames;
 	} uniformsAo, uniformsPhong;
 
-	GLuint          render_prog_ao;
-	GLuint          render_prog_phong;
+	GLuint          render_prog_ao, render_prog_phong;
 
 	GLuint          vaoSphere;
 	GLuint			iCubeBuffer;
 	GLuint			iSphereBuffer;
-
-	GLuint          vaoHorse;
-	long			horseTriangles;
+	GLuint			planeVAO;
+	long			Plane_Triangles;
 
 	vmath::mat4		modelMatrix;
 	vmath::mat4		viewMatrix;
@@ -697,11 +821,17 @@ private:
 
 	GLuint textureColor[2];
 	GLuint textureNormal[2];
-	GLuint textureGlow[2];
 	GLuint textureSpec[2];
-	GLuint animationArray[2];
 
-	bool moveLeft, moveRight, moveUp, moveDown, lookLeft, lookRight, lookUp, lookDown, resize, objectView;
+
+	GLuint frameBufferG;
+	GLuint frameBufferAo;
+
+
+	GLuint gPosition, gNormal, gAlbedo;
+
+
+	bool moveLeft, moveRight, moveUp, moveDown, lookLeft, lookRight, lookUp, lookDown, resize, objectView, useAOprog;
 };
 
 DECLARE_MAIN(advanced_graphics_final)

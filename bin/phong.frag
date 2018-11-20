@@ -2,16 +2,13 @@
 #extension GL_EXT_texture_array : enable
 layout (binding = 0) uniform sampler2D tex_color;
 layout (binding = 1) uniform sampler2D tex_norm;
-layout (binding = 2) uniform sampler2D tex_glow;
                                                           
-in vec4 vVaryingColor;
 in vec2 vVaryingTextureCoord;
 in vec4 vVaryingLightDir;
 in vec4 vVaryingNormal;
 in vec4 vVaryingPosViewSpace;
 out vec4 fragOut;
-
-uniform mat4 normalMatrix;
+out vec4 normal_depth;
 
 //http://pouet.net/topic.php?which=6266
 //calculates tangent space matrix from normal, vector in plane and texture coordinates
@@ -44,11 +41,12 @@ void main(void)
 
 	fragOut = vec4(diff);
 	fragOut *= vec4(texture(tex_color,vVaryingTextureCoord).rgb,1);
-	fragOut += vec4(texture(tex_glow,vVaryingTextureCoord).rgb*.2,1);
 
 	if(diff > 0)
 	{
 		float spec = pow(max(0, dot(viewDir, vReflection)),192.0);
 		fragOut+=  vec4(spec);
 	}
+
+	normal_depth = vec4(n, normalize(vVaryingPosViewSpace.z));
 }                                                         

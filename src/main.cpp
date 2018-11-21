@@ -232,6 +232,9 @@ class advanced_graphics_final : public sb6::application
 		// TODO: make it possible to override UNIFORMS ssao_radius and point_count (used in ao.frag)
 		// increase and decrease using a two keys for each
 
+		uniformsAo.ssao_radius = glGetUniformLocation(render_prog_ao, "ssao_radius");
+		uniformsAo.point_count = glGetUniformLocation(render_prog_ao, "point_count");
+
 		uniformsPhong.model = glGetUniformLocation(render_prog_phong, "model");
 		uniformsPhong.view = glGetUniformLocation(render_prog_phong, "view");
 		uniformsPhong.projection = glGetUniformLocation(render_prog_phong, "projection");
@@ -333,6 +336,8 @@ class advanced_graphics_final : public sb6::application
 		objectView = false;
 		useAOprog = false;
 		lookUp = lookDown = lookLeft = lookRight = false;
+		ssao_radius = 0.05;
+		point_count = 90;
 
 		glGenTextures(2, textureColor);
 		glGenTextures(2, textureNormal);
@@ -487,9 +492,6 @@ class advanced_graphics_final : public sb6::application
 		static const GLfloat black[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 		static const GLfloat one = 1.0f;
 		
-
-		
-
 		if(useAOprog)
 			glBindFramebuffer(GL_FRAMEBUFFER, frameBufferG);
 		if(!useAOprog)
@@ -551,7 +553,8 @@ class advanced_graphics_final : public sb6::application
 		
 		if (useAOprog) {
 			glUseProgram(render_prog_ao);
-
+			glUniform1f(uniformsAo.ssao_radius, ssao_radius);
+			glUniform1ui(uniformsAo.point_count, point_count);
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, gPosition);
 			glActiveTexture(GL_TEXTURE1);
@@ -590,10 +593,22 @@ class advanced_graphics_final : public sb6::application
 			switch (key)
 			{
 			case 283:
-				lookUp = true;
+				lookDown = true;
+				break;
+			case 82:
+				ssao_radius += 0.01;
+				break;
+			case 70:
+				ssao_radius -= 0.01;
+				break;
+			case 84:
+				point_count += 1;
+				break;
+			case 71:
+				point_count -= 1;
 				break;
 			case 284:
-				lookDown = true;
+				lookUp = true;
 				break;
 			case 285:
 				lookLeft = true;
@@ -621,10 +636,10 @@ class advanced_graphics_final : public sb6::application
 			switch (key)
 			{
 			case 283:
-				lookUp = false;
+				lookDown = false;
 				break;
 			case 284:
-				lookDown = false;
+				lookUp = false;
 				break;
 			case 285:
 				lookLeft = false;
@@ -786,8 +801,14 @@ private:
 		GLint       projection;
 		GLint       normalMatrix;
 		GLint		lightSource;
-	} uniformsAo, uniformsPhong;
+	} uniformsPhong;
 	/////////////////////////////////// https://github.com/openglsuperbible/sb6code/blob/master/src/ssao/ssao.cpp
+	struct {
+		GLint       ssao_radius;
+		GLint       point_count;
+	} uniformsAo;
+	GLfloat ssao_radius;
+	GLuint point_count;
 	struct kernel_points
 	{
 		vmath::vec4 point[256];

@@ -8,8 +8,8 @@ layout (binding = 1) uniform sampler2D sNormalDepth;
 layout (location = 0) out vec4 color;
 
 // Various uniforms controling SSAO effect
-uniform float ssao_radius = 0.05;
-uniform uint point_count = 30;
+uniform float ssao_radius;
+uniform uint point_count;
 
 // Uniform block containing up to 256 random directions (x,y,z,0)
 // and 256 more completely random vectors

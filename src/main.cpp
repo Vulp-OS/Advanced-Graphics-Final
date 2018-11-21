@@ -346,11 +346,11 @@ class advanced_graphics_final : public sb6::application
 		//////////////////////////////////////
 		//				Tree				//  // TODO: Better / more accurate names (cody volunteered as tribute)
 		//////////////////////////////////////
-		MESH planeMesh;
-		map<string, MATERIAL> planeMaterials;
-		const char *planeFile = "Lowpoly_tree_sample.obj"; // "Pacmannblend.obj"
-		LoadOBJFile(planeFile, planeMesh, planeMaterials);
-		createVBOfromMesh(&planeMesh, &planeVAO, &Plane_Triangles);
+		MESH treeMesh;
+		map<string, MATERIAL> treeMaterials;
+		const char *treeFile = "Lowpoly_tree_sample.obj"; // "Pacmannblend.obj"
+		LoadOBJFile(treeFile, treeMesh, treeMaterials);
+		createVBOfromMesh(&treeMesh, &treeVAO, &Tree_Triangles);
 
 
 
@@ -542,13 +542,13 @@ class advanced_graphics_final : public sb6::application
 					glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
 				}
 			}
-		glBindVertexArray(planeVAO);
+		glBindVertexArray(treeVAO);
 		glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
 		glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 200.0f));
 		glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
 		glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, vmath::translate(0.0f, -2.0f, 0.0f) * vmath::scale(0.3f) * vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
 		glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(0.0f, 0.0f, 1.0f, 0.0f));
-		glDrawArrays(GL_TRIANGLES, 0, Plane_Triangles * 3);
+		glDrawArrays(GL_TRIANGLES, 0, Tree_Triangles * 3);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		
 		if (useAOprog) {
@@ -821,8 +821,8 @@ private:
 	GLuint          vaoSphere;
 	GLuint			iCubeBuffer;
 	GLuint			iSphereBuffer;
-	GLuint			planeVAO;
-	long			Plane_Triangles;
+	GLuint			treeVAO;
+	long			Tree_Triangles;
 
 	vmath::mat4		modelMatrix;
 	vmath::mat4		viewMatrix;

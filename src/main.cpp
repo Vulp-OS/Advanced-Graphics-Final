@@ -198,8 +198,6 @@ class advanced_graphics_final : public sb6::application
 		OutputDebugStringA(bufferAo);
 		OutputDebugStringA(bufferPhong);
 
-
-
 		render_prog_ao = glCreateProgram();
 		glAttachShader(render_prog_ao, vs_ao);
 		glAttachShader(render_prog_ao, fs_ao);
@@ -231,13 +229,8 @@ class advanced_graphics_final : public sb6::application
 		if (status == GL_FALSE)
 			exit(1);
 
-
-		uniformsAo.model = glGetUniformLocation(render_prog_ao, "model");
-		uniformsAo.view = glGetUniformLocation(render_prog_ao, "view");
-		uniformsAo.projection = glGetUniformLocation(render_prog_ao, "projection");
-		uniformsAo.lightSource = glGetUniformLocation(render_prog_ao, "lightSource");
-		uniformsAo.normalMatrix = glGetUniformLocation(render_prog_ao, "normalMatrix");
-
+		// TODO: make it possible to override UNIFORMS ssao_radius and point_count (used in ao.frag)
+		// increase and decrease using a two keys for each
 
 		uniformsPhong.model = glGetUniformLocation(render_prog_phong, "model");
 		uniformsPhong.view = glGetUniformLocation(render_prog_phong, "view");
@@ -421,7 +414,7 @@ class advanced_graphics_final : public sb6::application
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		//////////////////////////////////////////////////////////////////////////////// https://github.com/openglsuperbible/sb6code/blob/master/src/ssao/ssao.cpp
-		glEnable(GL_CULL_FACE);
+		//glEnable(GL_CULL_FACE);
 		int i;
 		kernel_points point_data;
 

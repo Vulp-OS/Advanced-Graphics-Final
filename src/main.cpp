@@ -6,7 +6,6 @@
 #include <iostream>
 #include "TGALoader.h"
 #include "OBJLoader.h"
-using namespace NS_OBJLOADER;
 #include <shader.h>
 #include <Windows.h>
 #include <ctime>
@@ -346,8 +345,8 @@ class advanced_graphics_final : public sb6::application
 		//////////////////////////////////////
 		//				Tree				//  // TODO: Better / more accurate names (cody volunteered as tribute)
 		//////////////////////////////////////
-		MESH treeMesh;
-		map<string, MATERIAL> treeMaterials;
+		NS_OBJLOADER::MESH treeMesh;
+		NS_OBJLOADER::map<std::string, NS_OBJLOADER::MATERIAL> treeMaterials;
 		const char *treeFile = "Lowpoly_tree_sample.obj"; // "Pacmannblend.obj"
 		LoadOBJFile(treeFile, treeMesh, treeMaterials);
 		createVBOfromMesh(&treeMesh, &treeVAO, &Tree_Triangles);
@@ -374,7 +373,7 @@ class advanced_graphics_final : public sb6::application
 
 		
 
-		globalPerspective = vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 20.0f);
+		globalPerspective = vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 50.0f);
 
 
 
@@ -429,7 +428,7 @@ class advanced_graphics_final : public sb6::application
 			{
 				point_data.point[i][0] = rand_float() * 2.0f - 1.0f;
 				point_data.point[i][1] = rand_float() * 2.0f - 1.0f;
-				point_data.point[i][2] = rand_float(); // y u do dis?? <-- Cody knows
+				point_data.point[i][2] = rand_float() * 2.0f - 1.0f; // y u do dis?? <-- Cody knows
 				point_data.point[i][3] = 0.0f;
 			} while (length(point_data.point[i]) > 1.0f);
 			normalize(point_data.point[i]);
@@ -484,7 +483,7 @@ class advanced_graphics_final : public sb6::application
 		{
 			resize = false;
 			glViewport(0, 0, w, h);
-			globalPerspective = vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 20.0f);
+			globalPerspective = vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 50.0f);
 		}
 
 		checkInput();

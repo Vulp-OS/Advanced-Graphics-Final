@@ -172,7 +172,9 @@ class advanced_graphics_final : public sb6::application
 
 	}
 	
-	static inline float rand_float() // https://stackoverflow.com/questions/686353/c-random-float-number-generation
+	// https://stackoverflow.com/questions/686353/c-random-float-number-generation
+	// This method of generating a random float in C++ seems to be the standard
+	static inline float rand_float() 
 	{
 		return static_cast <float> (rand()) / static_cast <float> (RAND_MAX);
 	}
@@ -233,6 +235,7 @@ class advanced_graphics_final : public sb6::application
 
 		uniformsAo.ssao_radius = glGetUniformLocation(render_prog_ao, "ssao_radius");
 		uniformsAo.point_count = glGetUniformLocation(render_prog_ao, "point_count");
+		uniformsAo.NumSteps = glGetUniformLocation(render_prog_ao, "NumSteps");
 
 		uniformsPhong.model = glGetUniformLocation(render_prog_phong, "model");
 		uniformsPhong.view = glGetUniformLocation(render_prog_phong, "view");
@@ -337,10 +340,10 @@ class advanced_graphics_final : public sb6::application
 		lookUp = lookDown = lookLeft = lookRight = false;
 		ssao_radius = 0.05;
 		point_count = 90;
+		NumSteps = 4.0f;
 
 		glGenTextures(2, textureColor);
 		glGenTextures(2, textureNormal);
-		glGenTextures(2, textureSpec);
 
 		//////////////////////////////////////
 		//				Tree				//  // TODO: Better / more accurate names (cody volunteered as tribute)
@@ -351,21 +354,19 @@ class advanced_graphics_final : public sb6::application
 		LoadOBJFile(treeFile, treeMesh, treeMaterials);
 		createVBOfromMesh(&treeMesh, &treeVAO, &Tree_Triangles);
 
-
-
 		//////////////////////////////////////
 		//				SPHERE				//
 		//////////////////////////////////////
 
 		// Load Actual Texture
-		glActiveTexture(GL_TEXTURE0 + 0);
+		glActiveTexture(GL_TEXTURE0);
 
 		// Load texture from file
 		glBindTexture(GL_TEXTURE_2D, textureColor[0]);
 		NS_TGALOADER::LoadTGATexture("albedo.tga", GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
 		// Load Bump Map
-		glActiveTexture(GL_TEXTURE0 + 1);
+		glActiveTexture(GL_TEXTURE1);
 
 		// Load texture from file
 		glBindTexture(GL_TEXTURE_2D, textureNormal[0]);
@@ -375,10 +376,13 @@ class advanced_graphics_final : public sb6::application
 
 		globalPerspective = vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 50.0f);
 
+		// setup frame buffers
+		// render scene once and retrieve all geometrical information from objects and store in collection of textures called the “G-buffer”
+		// This is the "geometry pass"
+		// Sources: 
+		//		https://github.com/openglsuperbible/sb6code/blob/master/src/ssao/ssao.cpp
+		//		https://learnopengl.com/Advanced-Lighting/SSAO
 
-
-
-		//setup frame buffers
 		glGenFramebuffers(1, &frameBufferG);
 		glBindFramebuffer(GL_FRAMEBUFFER, frameBufferG);
 
@@ -407,18 +411,20 @@ class advanced_graphics_final : public sb6::application
 		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, gNormal, 0);
 		glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, gAlbedo, 0);
 
-		static const GLenum draw_buffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+		// Declare draw_buffers to allow the second shader program to reference data written by shader progam 1
+		// Source:		https://github.com/openglsuperbible/sb6code/blob/master/src/ssao/ssao.cpp
+		// Explanation:	https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glDrawBuffers.xhtml
+		draw_buffers[0] = GL_COLOR_ATTACHMENT0;
+		draw_buffers[1] = GL_COLOR_ATTACHMENT1;
 		glDrawBuffers(2, draw_buffers);
 
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-
 		glGenVertexArrays(1, &frameBufferAo);
-		glBindVertexArray(frameBufferAo);
 
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		//////////////////////////////////////////////////////////////////////////////// https://github.com/openglsuperbible/sb6code/blob/master/src/ssao/ssao.cpp
-		//glEnable(GL_CULL_FACE);
+		////////////////////////////////////////////////////////////////////////////// 
+		//			Generate random points for SSAO Sampling						//
+		//////////////////////////////////////////////////////////////////////////////
+		// Source:	https://github.com/openglsuperbible/sb6code/blob/master/src/ssao/ssao.cpp
+
 		int i;
 		kernel_points point_data;
 
@@ -428,7 +434,7 @@ class advanced_graphics_final : public sb6::application
 			{
 				point_data.point[i][0] = rand_float() * 2.0f - 1.0f;
 				point_data.point[i][1] = rand_float() * 2.0f - 1.0f;
-				point_data.point[i][2] = rand_float() * 2.0f - 1.0f; // y u do dis?? <-- Cody knows
+				point_data.point[i][2] = rand_float();
 				point_data.point[i][3] = 0.0f;
 			} while (length(point_data.point[i]) > 1.0f);
 			normalize(point_data.point[i]);
@@ -444,7 +450,6 @@ class advanced_graphics_final : public sb6::application
 		glGenBuffers(1, &points_buffer);
 		glBindBuffer(GL_UNIFORM_BUFFER, points_buffer);
 		glBufferData(GL_UNIFORM_BUFFER, sizeof(kernel_points), &point_data, GL_STATIC_DRAW);
-		////////////////////////////////////////////////////////////////////////////////
 	}
 
 	void checkInput()
@@ -478,7 +483,6 @@ class advanced_graphics_final : public sb6::application
 
 	virtual void render(double currentTime)
 	{
-		static const GLenum draw_buffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
 		if (resize)
 		{
 			resize = false;
@@ -486,61 +490,49 @@ class advanced_graphics_final : public sb6::application
 			globalPerspective = vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 50.0f);
 		}
 
+		useAOprog ? glBindFramebuffer(GL_FRAMEBUFFER, frameBufferG) : glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 		checkInput();
+		clearBuffers();
 
-		static const GLfloat black[] = { 0.0f, 0.0f, 0.0f, 1.0f };
-		static const GLfloat one = 1.0f;
-		
-		if(useAOprog)
-			glBindFramebuffer(GL_FRAMEBUFFER, frameBufferG);
-		if(!useAOprog)
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glUseProgram(render_prog_phong);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, textureColor[0]);
 
-		glEnable(GL_DEPTH_TEST);
-		glClearBufferfv(GL_COLOR, 0, black);
-		glClearBufferfv(GL_COLOR, 1, black);
-		glClearBufferfv(GL_DEPTH, 0, &one);
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, textureNormal[0]);
 
-		glBindBufferBase(GL_UNIFORM_BUFFER, 0, points_buffer);
+		// Draw sphere 1
+		for (int i = -10; i < 10; i++) {
+			for (int j = -10; j <= 0; j++) {
+				glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
 
-			glUseProgram(render_prog_phong);
-			glActiveTexture(GL_TEXTURE0 + 0);
-			glBindTexture(GL_TEXTURE_2D, textureColor[0]);
+				glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, globalPerspective);
+				glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
+				glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, (vmath::scale(0.4f) * vmath::translate(0.4f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
+				glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
 
-			glActiveTexture(GL_TEXTURE0 + 1);
-			glBindTexture(GL_TEXTURE_2D, textureNormal[0]);
-
-			glActiveTexture(GL_TEXTURE0 + 2);
-			glBindTexture(GL_TEXTURE_2D, textureSpec[0]);
-			// Draw sphere 1
-			for (int i = -10; i < 10; i++) {
-				for (int j = -10; j <= 0; j++) {
-					glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
-
-					glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, globalPerspective);
-					glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
-					glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, (vmath::scale(0.4f) * vmath::translate(0.4f, -1.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
-					glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
-
-					glBindVertexArray(vaoSphere);
-					glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
-				}
+				glBindVertexArray(vaoSphere);
+				glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
 			}
+		}
 
-			// Draw sphere 2
-			for (int i = -10; i < 10; i++) {
-				for (int j = -10; j <= 0; j++) {
-					glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
+		// Draw sphere 2
+		for (int i = -10; i < 10; i++) {
+			for (int j = -10; j <= 0; j++) {
+				glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
 
-					glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, globalPerspective);
-					glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
-					glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, (vmath::scale(0.3f) * vmath::translate(-2.0f, 0.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
-					glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
+				glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, globalPerspective);
+				glUniformMatrix4fv(uniformsPhong.view, 1, GL_FALSE, viewMatrix);
+				glUniformMatrix4fv(uniformsPhong.model, 1, GL_FALSE, (vmath::scale(0.3f) * vmath::translate(-2.0f, 0.0f, 0.0f) * vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f)));
+				glUniformMatrix4fv(uniformsPhong.normalMatrix, 1, GL_FALSE, vmath::rotate(180.0f, 1.0f, 0.0f, 0.0f) * vmath::rotate(15.0f, 0.0f, 0.0f, 1.0f));
 
-					glBindVertexArray(vaoSphere);
-					glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
-				}
+				glBindVertexArray(vaoSphere);
+				glDrawElements(GL_TRIANGLES, SLICES * STACKS * 6, GL_UNSIGNED_INT, (void*)0);
 			}
+		}
+
+		// Draw tree
 		glBindVertexArray(treeVAO);
 		glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
 		glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 200.0f));
@@ -550,10 +542,14 @@ class advanced_graphics_final : public sb6::application
 		glDrawArrays(GL_TRIANGLES, 0, Tree_Triangles * 3);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		
+		// Actually perform the AO pass
 		if (useAOprog) {
+			// Bind the random point data so that the ambient occlusion stuff can take random samples from the image
+			glBindBufferBase(GL_UNIFORM_BUFFER, 0, points_buffer);
 			glUseProgram(render_prog_ao);
 			glUniform1f(uniformsAo.ssao_radius, ssao_radius);
 			glUniform1ui(uniformsAo.point_count, point_count);
+			glUniform1f(uniformsAo.NumSteps, NumSteps);
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, gPosition);
 			glActiveTexture(GL_TEXTURE1);
@@ -562,7 +558,8 @@ class advanced_graphics_final : public sb6::application
 			glDisable(GL_DEPTH_TEST);
 			glBindVertexArray(frameBufferAo);
 			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-		}		
+			glEnable(GL_DEPTH_TEST);
+		}
 	}
 
 	virtual void shutdown()
@@ -605,6 +602,12 @@ class advanced_graphics_final : public sb6::application
 				break;
 			case 71:
 				point_count -= 1;
+				break;
+			case 89:
+				NumSteps += 1.0;
+				break;
+			case 72:
+				NumSteps -= 1.0;
 				break;
 			case 284:
 				lookUp = true;
@@ -660,6 +663,14 @@ class advanced_graphics_final : public sb6::application
 				break;
 			}
 
+	}
+
+	void clearBuffers() {
+		static const GLfloat black[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		static const GLfloat one = 1.0f;
+		glClearBufferfv(GL_COLOR, 0, black);
+		glClearBufferfv(GL_COLOR, 1, black);
+		glClearBufferfv(GL_DEPTH, 0, &one);
 	}
 
 	bool gluInvertMatrix(const float m[16], float invOut[16])
@@ -801,24 +812,32 @@ private:
 		GLint       normalMatrix;
 		GLint		lightSource;
 	} uniformsPhong;
-	/////////////////////////////////// https://github.com/openglsuperbible/sb6code/blob/master/src/ssao/ssao.cpp
+	
+	// Set up variables required for AO
 	struct {
 		GLint       ssao_radius;
 		GLint       point_count;
+		GLint		NumSteps;
 	} uniformsAo;
 	GLfloat ssao_radius;
+	GLfloat NumSteps;
 	GLuint point_count;
+
 	struct kernel_points
 	{
 		vmath::vec4 point[256];
 		vmath::vec4	random_vectors[256];
 	};
-	GLuint      points_buffer;
-	///////////////////////////////////
+	GLuint points_buffer, gPosition, gNormal, gAlbedo;
+
+	GLenum draw_buffers[2];
+
+	GLuint frameBufferG;
+	GLuint frameBufferAo;
+	
 	GLuint          render_prog_ao, render_prog_phong;
 
 	GLuint          vaoSphere;
-	GLuint			iCubeBuffer;
 	GLuint			iSphereBuffer;
 	GLuint			treeVAO;
 	long			Tree_Triangles;
@@ -832,15 +851,6 @@ private:
 
 	GLuint textureColor[2];
 	GLuint textureNormal[2];
-	GLuint textureSpec[2];
-
-
-	GLuint frameBufferG;
-	GLuint frameBufferAo;
-
-
-	GLuint gPosition, gNormal, gAlbedo;
-
 
 	bool moveLeft, moveRight, moveUp, moveDown, lookLeft, lookRight, lookUp, lookDown, resize, objectView, useAOprog;
 };

@@ -1,5 +1,7 @@
 #version 430 core
 
+// https://github.com/openglsuperbible/sb6code/blob/master/bin/media/shaders/ssao/ssao.fs.glsl
+
 // Samplers for pre-rendered color, normal and depth
 layout (binding = 0) uniform sampler2D sColor;
 layout (binding = 1) uniform sampler2D sNormalDepth;
@@ -9,66 +11,61 @@ layout (location = 0) out vec4 color;
 
 // Various uniforms controling SSAO effect
 uniform float ssao_radius;
+uniform float NumSteps;
 uniform uint point_count;
 
 // Uniform block containing up to 256 random directions (x,y,z,0)
 // and 256 more completely random vectors
-layout (binding = 0, std140) uniform SAMPLE_POINTS
-{
+// This interface block is defined with std140 to explicitly state the layout of the block.
+//	STD140 prevents unused uniforms from being removed
+layout (binding = 0, std140) uniform KERNEL_POINTS {
     vec4 pos[256];
     vec4 random_vectors[256];
 } points;
 
-void main(void)
-{
-    vec2 P = gl_FragCoord.xy / textureSize(sNormalDepth, 0); // Get texture position from gl_FragCoord
-    vec4 ND = textureLod(sNormalDepth, P, 0); // ND = normal and depth
+void main(void) {
+    vec2 TexPosition = gl_FragCoord.xy / textureSize(sNormalDepth, 0); // Get texture position from gl_FragCoord
+    vec4 NormalAndDepth = textureLod(sNormalDepth, TexPosition, 0); // ND = normal and depth
     
-    vec3 N = ND.xyz; // Extract normal
-    float my_depth = ND.w; // Extract depth
+    vec3 Normal = NormalAndDepth.xyz; // Extract normal
+    float CurrentFragDepth = NormalAndDepth.w; // Extract depth
 
-    // Local temporary variables
-    int i;
-    int j;
-    int n;
-
-    float occ = 0.0;
-    float total = 0.0;
+    float occ = 0.0;	// Occlusion Factor
+    float TotalSteps = 0.0;
 
     // Select random vector using noise1 to generate a random number
-	n = int(floor(((noise1(gl_FragCoord.x * gl_FragCoord.y) + 1.0) / 2.0) * 255.0));
-    vec4 v = points.random_vectors[n]; // Pull one of the random vectors
+	int RandomIndex = int(floor(((noise1(gl_FragCoord.x * gl_FragCoord.y) + 1.0) / 2.0) * 255.0));
+    vec4 RandomVector = points.random_vectors[RandomIndex]; // Pull one of the random vectors
 
-    float r = (v.r + 3.0) * 0.1; // r is our 'radius randomizer'
+    float RandomRadius = (RandomVector.r + 3.0) * 0.1; // 'radius randomizer'
 
     // For each random point (or direction)...
-    for (i = 0; i < point_count; i++)
+    for (int i = 0; i < point_count; i++)
     {
         vec3 dir = points.pos[i].xyz; // Get direction
-        if (dot(N, dir) < 0.0) // Put it into the correct hemisphere
+        if (dot(Normal, dir) < 0.0) // Put it into the correct hemisphere
             dir = -dir;
-        float f = 0.0; // f is the distance we've stepped in this direction
-        float z = my_depth; // z is the interpolated depth
+        float Distance = 0.0; // The distance we've stepped in this direction
+        float InterpolatedDepth = CurrentFragDepth;
 
-        // We're going to take 4 steps - we could make this
-        // configurable
-        total += 4.0;
+        // We're going to take (NumSteps) steps
+        TotalSteps += NumSteps;
 
-        for (j = 0; j < 4; j++)
+        for (int j = 0; j < int(NumSteps); j++)
         {
             
-            f += r; // Step in the right direction
-            z -= dir.z * f; // Step _towards_ viewer reduces z
+            Distance += RandomRadius; // Step in the right direction
+            InterpolatedDepth -= dir.z * Distance; // Step _towards_ viewer reduces z
             // Read depth from current fragment
-            float their_depth = textureLod(sNormalDepth, (P + dir.xy * f * ssao_radius), 0).w;
-            // Calculate a weighting (d) for this fragment's contribution to occlusion
-            float d = abs(their_depth - my_depth);
-            d *= d;
-            if ((z - their_depth) > 0.0) // If we're obscured, accumulate occlusion
-                occ += 4.0 / (1.0 + d);
+            float SampleDepth = textureLod(sNormalDepth, (TexPosition + dir.xy * Distance * ssao_radius), 0).w;
+            // Calculate a weighting for this fragment's contribution to occlusion
+            float OcclusionWeight = abs(SampleDepth - CurrentFragDepth);
+            OcclusionWeight *= OcclusionWeight;
+            if ((InterpolatedDepth - SampleDepth) > 0.0) // If we're obscured, accumulate occlusion
+                occ += NumSteps / (1.0 + OcclusionWeight);
         }
     }
-    float ao_amount = float(1.0 - occ / total); // Calculate occlusion amount
-    vec4 object_color =  textureLod(sColor, P, 0); // Get object color from color texture
+    float ao_amount = float(1.0 - occ / TotalSteps); // Calculate occlusion amount
+    vec4 object_color =  textureLod(sColor, TexPosition, 0); // Get object color from color texture
 	color = object_color * ao_amount; // Mix in ambient color scaled by SSAO level
 }

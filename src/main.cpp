@@ -230,9 +230,6 @@ class advanced_graphics_final : public sb6::application
 		if (status == GL_FALSE)
 			exit(1);
 
-		// TODO: make it possible to override UNIFORMS ssao_radius and point_count (used in ao.frag)
-		// increase and decrease using a two keys for each
-
 		uniformsAo.ssao_radius = glGetUniformLocation(render_prog_ao, "ssao_radius");
 		uniformsAo.point_count = glGetUniformLocation(render_prog_ao, "point_count");
 		uniformsAo.NumSteps = glGetUniformLocation(render_prog_ao, "NumSteps");
@@ -346,8 +343,22 @@ class advanced_graphics_final : public sb6::application
 		glGenTextures(2, textureNormal);
 
 		//////////////////////////////////////
-		//				Tree				//  // TODO: Better / more accurate names (cody volunteered as tribute)
+		//				Tree				//
 		//////////////////////////////////////
+		// Load Actual Texture
+		glActiveTexture(GL_TEXTURE0);
+
+		// Load texture from file
+		glBindTexture(GL_TEXTURE_2D, textureColor[1]);
+		NS_TGALOADER::LoadTGATexture("skin_albedo.tga", GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+
+		// Load Bump Map
+		glActiveTexture(GL_TEXTURE1);
+
+		// Load texture from file
+		glBindTexture(GL_TEXTURE_2D, textureNormal[1]);
+		NS_TGALOADER::LoadTGATexture("skin_normal.tga", GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+
 		NS_OBJLOADER::MESH treeMesh;
 		NS_OBJLOADER::map<std::string, NS_OBJLOADER::MATERIAL> treeMaterials;
 		const char *treeFile = "Lowpoly_tree_sample.obj"; // "Pacmannblend.obj"
@@ -533,6 +544,12 @@ class advanced_graphics_final : public sb6::application
 		}
 
 		// Draw tree
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, textureColor[1]);
+
+		glActiveTexture(GL_TEXTURE1);
+		glBindTexture(GL_TEXTURE_2D, textureNormal[1]);
+
 		glBindVertexArray(treeVAO);
 		glUniform4f(uniformsPhong.lightSource, 10.0f, 3.0f, 10.0f, 1.0f);
 		glUniformMatrix4fv(uniformsPhong.projection, 1, GL_FALSE, vmath::perspective(45.0f, (float)w / (float)h, 0.1f, 200.0f));

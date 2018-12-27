@@ -1,5 +1,5 @@
 # OpenGL Screen Space Ambient Occlusion
-
+<a href = "https://docs.google.com/presentation/d/1DGuLrVCwhrBYG72fgktFNBgaFn_iB3PmsgWsB8iX_j4/edit?usp=sharing" ><img src="https://lh3.ggpht.com/9rwhkrvgiLhXVBeKtScn1jlenYk-4k3Wyqt1PsbUr9jhGew0Gt1w9xbwO4oePPd5yOM=w300" width="25"></a>
 ## Introduction
 
 >This project is a collaborative implementation of screen space ambient occlusion in OpenGL for our Advanced Graphics final project.
